@@ -1,0 +1,256 @@
+{
+  "id": "filmancc_ultimate",
+  "name": "Filman.cc (pełny)",
+  "version": "2.0.0",
+  "description": "TEST.cc z lazy-resolve, premium Vodi, cache i retry.",
+  "baseUrl": "https://filman.cc",
+  "language": "pl",
+  "types": ["movies", "series"],
+  "nsfw": false,
+  "priority": 10,
+  "enabledByDefault": true,
+  "cf": true,
+  "category": "portal",
+  "moduleType": "scraper",
+  "runtime": { "enabled": true },
+
+  "settings": [
+    { "key": "username", "label": "Login", "type": "text", "required": true, "placeholder": "Twoj login", "group": "Konto" },
+    { "key": "password", "label": "Haslo", "type": "password", "required": true, "sensitive": true, "group": "Konto" }
+  ],
+
+  "auth": {
+    "type": "login",
+    "webviewLogin": true,
+    "loginUrl": "/logowanie",
+    "usernameField": "login",
+    "passwordField": "password",
+    "formSelector": "#signin-form",
+    "successCookie": "BKD_REMEMBER",
+    "username": "{settings.username}",
+    "password": "{settings.password}",
+    "fields": { "remember": "on", "submit": "" },
+    "csrf": { "url": "/logowanie", "selector": "input[name=_csrf] | attr:value", "field": "_csrf" },
+    "verify": { "url": "/android-apk", "loggedIn": "yloguj" }
+  },
+
+  "search": {
+    "url": "/search",
+    "method": "GET",
+    "params": { "phrase": "{title}" },
+    "headers": {
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "pl,en-US;q=0.7,en;q=0.3",
+      "DNT": "1",
+      "Referer": "{baseUrl}/",
+      "Upgrade-Insecure-Requests": "1",
+      "User-Agent": "FilmanKodi/1.0 (compatible; Firefox/146.0)"
+    },
+    "responseType": "html",
+    "resultSelector": {
+      "container": "div.col-xs-6:has(div.poster)",
+      "fields": {
+        "title": "div.poster img | attr:alt",
+        "url": "div.poster a | href",
+        "year": ".film_year | text",
+        "thumbnail": "div.poster img | attr:data-src"
+      }
+    },
+    "fallback": {
+      "method": "POST",
+      "url": "/szukam",
+      "params": { "phrase": "{title}" },
+      "csrf": true,
+      "headers": { "X-Requested-With": "XMLHttpRequest" }
+    }
+  },
+
+  "matching": {
+    "titleField": "title",
+    "yearField": "year",
+    "urlField": "url",
+    "yearTolerance": 1,
+    "scoring": { "minScore": 70 }
+  },
+
+  "detail": {
+    "url": "{result.url}",
+    "headers": {
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "pl,en-US;q=0.7,en;q=0.3",
+      "DNT": "1",
+      "Upgrade-Insecure-Requests": "1",
+      "User-Agent": "FilmanKodi/1.0 (compatible; Firefox/146.0)",
+      "Referer": "{baseUrl}/search?phrase={title}"
+    }
+  },
+
+  "episode": {
+    "url": "{result.url}",
+    "container": "a:matchesOwn(\\[s\\d+e\\d+\\]), a[href*=\"/odcinek\"], a[href*=\"/e/\"]",
+    "urlField": "| href",
+    "labelField": "| text",
+    "pattern": "s(\\d+)e(\\d+)",
+    "cache": { "ttl": 86400 }
+  },
+
+  "sources": {
+    "extract": [
+      {
+        "type": "css",
+        "selector": "table#links tr:has(a[data-id])",
+        "fields": {
+          "dataId": "a | attr:data-id",
+          "hosting": "img | attr:alt",
+          "version": "td:nth-child(2) | text",
+          "quality": "td:nth-child(3) | text",
+          "ago": "td:nth-child(1) | text"
+        }
+      }
+    ],
+    "transform": [
+      {
+        "field": "url",
+        "type": "concat",
+        "prefix": "filmancc-lazy://resolve?dataId={dataId}&page={result.url}",
+        "suffix": ""
+      },
+      {
+        "field": "quality",
+        "type": "map",
+        "values": { "Wysoka": "1080p", "Średnia": "720p", "Niska": "SD" },
+        "default": "AUTO"
+      },
+      {
+        "field": "hosting",
+        "type": "map",
+        "values": { "bigdisk.stream": "bigdisk" }
+      }
+    ],
+    "output": {
+      "url": "{url}",
+      "hosting": "{hosting}",
+      "version": "{version}",
+      "quality": "{quality}",
+      "type": "pl",
+      "language": "pl"
+    }
+  },
+
+  "resolver": {
+    "type": "lazy",
+    "steps": [
+      {
+        "step": 1,
+        "description": "Pobierz routeToken ze strony odtwarzania",
+        "method": "GET",
+        "url": "{page}",
+        "extract": { "type": "regex", "pattern": "var (?:rt|routeToken)\\s*=\\s*'([^']+)'", "field": "routeToken" }
+      },
+      {
+        "step": 2,
+        "description": "Żądanie do /link/token z dataId i routeToken",
+        "method": "GET",
+        "url": "/link/token?link_id={dataId}&rt={routeToken}",
+        "headers": { "X-Requested-With": "XMLHttpRequest" },
+        "responseType": "json",
+        "extract": { "type": "jsonPath", "path": "$.url", "field": "encodedUrl" }
+      },
+      {
+        "step": 3,
+        "description": "Dekoduj base64",
+        "transform": { "type": "base64Decode", "field": "decodedUrl" }
+      },
+      {
+        "step": 4,
+        "description": "Jeśli decodedUrl zawiera tmp-url.pro, zastosuj XOR z kluczami _a,_b,_c ze strony",
+        "condition": "contains(tmp-url.pro)",
+        "method": "GET",
+        "url": "{decodedUrl}",
+        "extract": [
+          { "type": "regex", "pattern": "var _e = '([^']+)'", "field": "_e" },
+          { "type": "regex", "pattern": "var _a = '([^']+)'", "field": "_a" },
+          { "type": "regex", "pattern": "var _b = '([^']+)'", "field": "_b" },
+          { "type": "regex", "pattern": "var _c = '([^']+)'", "field": "_c" }
+        ],
+        "transform": {
+          "type": "xor",
+          "key": "{_a}{_b}{_c}",
+          "input": "{_e}",
+          "output": "finalUrl"
+        }
+      }
+    ],
+    "output": {
+      "url": "{finalUrl}",
+      "direct": true
+    }
+  },
+
+  "premium": {
+    "enabled": true,
+    "apiBase": "https://cloud.vodi.cc",
+    "auth": {
+      "loginEndpoint": "/auth/login",
+      "refreshEndpoint": "/auth/token/refresh",
+      "tokenField": "token",
+      "refreshTokenField": "refreshToken"
+    },
+    "search": {
+      "movies": "/movies/search",
+      "series": "/series/search"
+    },
+    "episode": {
+      "seriesEndpoint": "/series/{seriesId}",
+      "seasonField": "seasons"
+    },
+    "signedLink": {
+      "endpoint": "/signed-links",
+      "strategies": ["meganta_md5_v1", "hmac_sha256_v1"],
+      "quality": "auto"
+    },
+    "cache": { "ttl": 604800 }
+  },
+
+  "errorDetection": [
+    {
+      "id": "cloudflare",
+      "detectIn": "body",
+      "contains": "cf-browser-verification",
+      "response": {
+        "error": "CLOUDFLARE_CHALLENGE",
+        "message": "Wymagane rozwiązanie Cloudflare.",
+        "requiresWebView": true,
+        "url": "{baseUrl}"
+      }
+    },
+    {
+      "id": "login_page",
+      "detectIn": "body",
+      "contains": "<title>Logowanie",
+      "response": {
+        "error": "LOGIN_REQUIRED",
+        "message": "Filman zwrócił stronę logowania. Sprawdź login i hasło.",
+        "requiresWebView": true,
+        "url": "{baseUrl}/logowanie"
+      }
+    },
+    {
+      "id": "rate_limit",
+      "detectIn": "headers",
+      "statusCode": 429,
+      "response": {
+        "error": "RATE_LIMIT",
+        "message": "Przekroczono limit dzienny Vodi. Spróbuj później.",
+        "retryAfter": "{Retry-After}"
+      }
+    }
+  ],
+
+  "cache": {
+    "session": { "ttl": 604800 },
+    "episodes": { "ttl": 86400 },
+    "vodiTokens": { "ttl": 604800 },
+    "searchResults": { "ttl": 86400 }
+  }
+}
