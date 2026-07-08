@@ -1,0 +1,117 @@
+{
+  "id": "animezone_pl",
+  "name": "AnimeZone.pl",
+  "version": "1.0.0",
+  "description": "Scraper dla animezone.pl (bez logowania).",
+  "baseUrl": "https://www.animezone.pl",
+  "language": "pl",
+  "types": ["movies", "series"],
+  "nsfw": false,
+  "priority": 10,
+  "enabledByDefault": true,
+  "cf": true,
+  "category": "portal",
+  "moduleType": "scraper",
+  "runtime": {
+    "enabled": true
+  },
+
+  "search": {
+    "url": "/szukaj",
+    "method": "GET",
+    "params": {
+      "q": "{title}"
+    },
+    "headers": {
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "pl,en-US;q=0.9,en;q=0.8",
+      "Referer": "{baseUrl}/",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+    },
+    "responseType": "html",
+    "resultSelector": {
+      "container": "div.description.pull-right:has(a[href*=\"/anime/\"])",
+      "fields": {
+        "title": "a | text",
+        "url": "a[href] | href",
+        "thumbnail": "img | src"
+      }
+    }
+  },
+
+  "matching": {
+    "titleField": "title",
+    "yearField": "year",
+    "urlField": "url",
+    "yearTolerance": 1,
+    "scoring": {
+      "minScore": 55
+    }
+  },
+
+  "detail": {
+    "url": "{result.url}",
+    "headers": {
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "pl,en-US;q=0.9,en;q=0.8",
+      "Referer": "{baseUrl}/szukaj?q={title}",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+    }
+  },
+
+  "episode": {
+    "url": "{result.url}",
+    "container": "a[href*=\"/odcinek/\"]",
+    "urlField": "| href",
+    "labelField": "| text",
+    "pattern": "odcinek/(\\d+)"
+  },
+
+  "sources": {
+    "extract": [
+      {
+        "type": "regex",
+        "pattern": "<tr[^>]*>.*?<td>([^<]+)</td>.*?<td[^>]*>.*?</td>.*?<td[^>]*>.*?<span class=\"sprites ([A-Z]{2}) lang\">.*?</td>.*?<td[^>]*>.*?data-[a-zA-Z]+=\"([0-9][^\"]*)\".*?</td>.*?</tr>",
+        "fields": {
+          "host": 1,
+          "language": 2,
+          "dataId": 3
+        }
+      }
+    ],
+    "transform": [
+      {
+        "field": "url",
+        "type": "concat",
+        "prefix": "animezone-lazy://resolve?dataId={dataId}&page={result.url}"
+      },
+      {
+        "field": "language",
+        "type": "lowercase"
+      }
+    ],
+    "output": {
+      "url": "{url}",
+      "hosting": "{host}",
+      "quality": "720p",
+      "language": "{language}",
+      "type": "pl",
+      "direct": false,
+      "canPlay": false
+    }
+  },
+
+  "errorDetection": [
+    {
+      "id": "cloudflare",
+      "detectIn": "body",
+      "contains": "cf-browser-verification",
+      "response": {
+        "error": "CLOUDFLARE_CHALLENGE",
+        "message": "Wymagane rozwiązanie Cloudflare.",
+        "requiresWebView": true,
+        "url": "{baseUrl}"
+      }
+    }
+  ]
+}
