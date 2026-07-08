@@ -1,0 +1,192 @@
+{
+  "id": "shinden_pl",
+  "name": "Shinden.pl",
+  "version": "1.0.0",
+  "description": "Scraper dla shinden.pl z logowaniem (wzorowany na filman.cc).",
+  "baseUrl": "https://shinden.pl",
+  "language": "pl",
+  "types": ["movies", "series"],
+  "nsfw": false,
+  "priority": 10,
+  "enabledByDefault": true,
+  "cf": true,
+  "category": "portal",
+  "moduleType": "scraper",
+  "runtime": {
+    "enabled": true
+  },
+
+  "settings": [
+    {
+      "key": "username",
+      "label": "Login",
+      "type": "text",
+      "required": true,
+      "placeholder": "Nazwa użytkownika",
+      "group": "Konto"
+    },
+    {
+      "key": "password",
+      "label": "Hasło",
+      "type": "password",
+      "required": true,
+      "placeholder": "Hasło",
+      "sensitive": true,
+      "group": "Konto"
+    }
+  ],
+
+  "auth": {
+    "type": "login",
+    "webviewLogin": true,
+    "loginUrl": "/main/0/login",
+    "usernameField": "username",
+    "passwordField": "password",
+    "formSelector": "form[action*='/login']",
+    "successCookie": "PHPSESSID",
+    "username": "{settings.username}",
+    "password": "{settings.password}",
+    "fields": {
+      "login": ""
+    },
+    "verify": {
+      "url": "/",
+      "loggedIn": "Wyloguj"
+    }
+  },
+
+  "errorDetection": [
+    {
+      "id": "cloudflare",
+      "detectIn": "body",
+      "contains": "cf-browser-verification",
+      "response": {
+        "error": "CLOUDFLARE_CHALLENGE",
+        "message": "Wymagane rozwiązanie Cloudflare.",
+        "requiresWebView": true,
+        "url": "{baseUrl}"
+      }
+    },
+    {
+      "id": "login_page",
+      "detectIn": "body",
+      "contains": "Zaloguj się",
+      "response": {
+        "error": "LOGIN_REQUIRED",
+        "message": "Shinden zwrócił stronę logowania. Sprawdź login i hasło.",
+        "requiresWebView": true,
+        "url": "{baseUrl}/"
+      }
+    }
+  ],
+
+  "search": {
+    "url": "/series",
+    "method": "GET",
+    "params": {
+      "search": "{title}"
+    },
+    "headers": {
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "pl,en-US;q=0.7,en;q=0.3",
+      "DNT": "1",
+      "Referer": "{baseUrl}/",
+      "Upgrade-Insecure-Requests": "1",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+    },
+    "responseType": "html",
+    "resultSelector": {
+      "container": "li.desc-col:has(a[href*=\"/series/\"])",
+      "fields": {
+        "title": "a | text",
+        "url": "a[href] | href",
+        "year": "a | text",
+        "thumbnail": "img | src"
+      }
+    }
+  },
+
+  "matching": {
+    "titleField": "title",
+    "yearField": "year",
+    "urlField": "url",
+    "yearTolerance": 1,
+    "scoring": {
+      "minScore": 55
+    }
+  },
+
+  "detail": {
+    "url": "{result.url}",
+    "headers": {
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "pl,en-US;q=0.7,en;q=0.3",
+      "DNT": "1",
+      "Referer": "{baseUrl}/search?search={title}",
+      "Upgrade-Insecure-Requests": "1",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
+    }
+  },
+
+  "episode": {
+    "url": "{result.url}/all-episodes",
+    "container": "tbody.list-episode-checkboxes tr",
+    "urlField": "a[href] | href",
+    "labelField": "td:nth-child(2) | text",
+    "pattern": "(\\d+)"
+  },
+
+  "sources": {
+    "extract": [
+      {
+        "type": "css",
+        "selector": "section.episode-player-list tr",
+        "fields": {
+          "host": "td:nth-child(1) | text",
+          "quality": "td:nth-child(2) | text",
+          "audio": "td:nth-child(3) span.mobile-hidden | text",
+          "subs": "td:nth-child(4) span.mobile-hidden | text",
+          "vidId": "td:nth-child(6) | regex:data_(\\d+)",
+          "authCode": "script | regex:_Storage\\.basic.*=.*'([^']+)'"
+        }
+      }
+    ],
+    "transform": [
+      {
+        "field": "url",
+        "type": "concat",
+        "prefix": "https://api4.shinden.pl/xhr/",
+        "middle": "{vidId}",
+        "suffix": "/player_load?auth={authCode}"
+      },
+      {
+        "field": "quality",
+        "type": "map",
+        "values": {
+          "1080": "1080p",
+          "720": "720p",
+          "480": "480p"
+        },
+        "default": "AUTO"
+      },
+      {
+        "field": "language",
+        "type": "map",
+        "values": {
+          "Polski": "pl",
+          "English": "en"
+        },
+        "default": "pl"
+      }
+    ],
+    "output": {
+      "url": "{url}",
+      "hosting": "{host}",
+      "quality": "{quality}",
+      "language": "{language}",
+      "type": "pl",
+      "direct": false,
+      "canPlay": false
+    }
+  }
+}
