@@ -1,8 +1,8 @@
 {
-  "id": "naszeanime_api",
-  "name": "NaszeAnime.pl (API)",
-  "version": "2.0.0",
-  "description": "Scraper wykorzystujący API tRPC i HTML. Wyszukuje, listuje odcinki i wyciąga embed playerów.",
+  "id": "naszeanime_lazy",
+  "name": "NaszeAnime.pl (Lazy)",
+  "version": "1.0.0",
+  "description": "Scraper lazy-resolve dla naszeanime.pl. Wyszukuje przez API, listuje odcinki, zwraca link do resolwera.",
   "baseUrl": "https://naszeanime.pl",
   "language": "pl",
   "types": ["movies", "series"],
@@ -34,10 +34,10 @@
       "path": "$.result.data.json.items[*]",
       "fields": {
         "title": "title",
-        "url": "handle",
+        "handle": "handle",
         "year": "year",
         "thumbnail": "poster",
-        "animeId": "id"
+        "id": "id"
       }
     },
     "transform": [
@@ -91,75 +91,25 @@
         "fields": { "episodeId": 1 }
       }
     ],
+    "transform": [
+      {
+        "field": "episodeId",
+        "type": "regexReplace",
+        "pattern": ".*",
+        "replacement": "naszeanime-lazy://resolve?episodeId={episodeId}&anime={result.url}"
+      }
+    ],
     "output": {
-      "url": "naszeanime-lazy://resolve?episodeId={episodeId}&anime={result.url}",
+      "url": "{episodeId}",
       "hosting": "naszeanime.pl",
-      "version": "API",
+      "version": "Lazy",
       "quality": "AUTO",
       "type": "pl",
       "language": "pl",
       "direct": false,
       "canPlay": false,
-      "description": "Wymaga rozpoznania odcinka przez resolver (pobranie graczy)."
+      "description": "Wymaga rozwiązania przez zewnętrzny resolver."
     }
-  },
-
-  "resolver": {
-    "type": "api",
-    "endpoint": "/anime/{anime}/get-episode-streams",
-    "params": {
-      "epId": "{episodeId}",
-      "playerId": "{playerId}"
-    },
-    "headers": {
-      "Accept": "*/*",
-      "Accept-Language": "pl,en-US;q=0.9,en;q=0.8",
-      "Referer": "{baseUrl}/anime/{anime}/watch?epId={episodeId}",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
-    },
-    "prefetch": [
-      {
-        "url": "/api/trpc/anime.player.getPlayers?batch=1",
-        "method": "GET",
-        "params": {
-          "input": "{ \"0\": { \"json\": { \"episodeId\": {episodeId} } } }"
-        },
-        "responseType": "jsonl",
-        "extract": {
-          "type": "jsonPath",
-          "path": "$.result.data.json.players[*]",
-          "fields": {
-            "playerId": "id",
-            "name": "name"
-          }
-        }
-      },
-      {
-        "url": "/api/trpc/anime.player.getPlayerEmbedUrl?batch=1",
-        "method": "GET",
-        "params": {
-          "input": "{ \"0\": { \"json\": { \"playerId\": {playerId} } } }"
-        },
-        "responseType": "jsonl",
-        "extract": {
-          "type": "jsonPath",
-          "path": "$.result.data.json.url",
-          "fields": {
-            "embedUrl": "$"
-          }
-        },
-        "output": {
-          "url": "{embedUrl}",
-          "hosting": "player",
-          "version": "embed",
-          "quality": "AUTO",
-          "type": "pl",
-          "language": "pl",
-          "direct": false,
-          "canPlay": false
-        }
-      }
-    ]
   },
 
   "errorDetection": [
@@ -172,17 +122,6 @@
         "message": "Wymagane rozwiązanie Cloudflare.",
         "requiresWebView": true,
         "url": "{baseUrl}"
-      }
-    },
-    {
-      "id": "login_required",
-      "detectIn": "body",
-      "contains": "Zaloguj się",
-      "response": {
-        "error": "LOGIN_REQUIRED",
-        "message": "Wymagane zalogowanie na naszeanime.pl.",
-        "requiresWebView": true,
-        "url": "{baseUrl}/auth/login"
       }
     }
   ]
